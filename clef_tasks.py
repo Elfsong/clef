@@ -11,9 +11,6 @@ import tensorflow_datasets as tfds
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 
-DATA_DIR = "gs://nlp_base/mingzhe/clef"
-
-
 DEFAULT_SPM_PATH = "gs://t5-data/vocabs/mc4.250000.100extra/sentencepiece.model"
 DEFAULT_VOCAB = t5.data.SentencePieceVocabulary(DEFAULT_SPM_PATH)
 
@@ -29,19 +26,16 @@ clef_multilingual_tsv_path = {
 }
 
 def clef_metric(targets, predictions):
-	print("targets:", targets)
-	print("predictions:", predictions)
-
 	metric_dict = {
-		"precision": precision_score(targets, predictions, average='macro'),
-		"recall": recall_score(targets, predictions, average='macro'),
-		"f1": f1_score(targets, predictions, average='macro')
+		"precision": precision_score(targets, predictions, pos_label="yes", average='binary'),
+		"recall": recall_score(targets, predictions, pos_label="yes", average='binary'),
+		"f1": f1_score(targets, predictions, pos_label="yes", average='binary')
 	}
 	return metric_dict
 
-
-def clef_dataset_fn(split, shuffle_files=False):
+def clef_dataset_fn(split, shuffle_files=False, lang="multilingual"):
 	del shuffle_files
+	print(f"Current Dataset [{lang}]")
 	ds = tf.data.TextLineDataset(clef_multilingual_tsv_path[split])
 	ds = ds.map(functools.partial(tf.io.decode_csv, record_defaults=["", ""], field_delim="\t", use_quote_delim=False), num_parallel_calls=tf.data.experimental.AUTOTUNE)
 	ds = ds.map(lambda *ex: dict(zip(["input", "target"], ex)))
@@ -65,7 +59,7 @@ def clef_preprocessor(ds):
 seqio.TaskRegistry.add(
 	"clef_multilingual",
 	source=seqio.FunctionDataSource(
-		dataset_fn=clef_dataset_fn,
+		dataset_fn=functools.partial(clef_dataset_fn, lang="multilingual"),
 		splits=["train", "dev"]
 	),
 
@@ -75,7 +69,7 @@ seqio.TaskRegistry.add(
 	],
 
 	postprocess_fn=t5.data.postprocessors.lower_text,
-	metric_fns=[t5.evaluation.metrics.accuracy, clef_metric],
+	metric_fns=[clef_metric],
 	output_features=DEFAULT_OUTPUT_FEATURES,
 )
 
